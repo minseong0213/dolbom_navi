@@ -36,11 +36,11 @@ export default function HeroSection() {
 
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
             <a
-              href="#beta"
+              href="#reservation"
               onClick={() => trackEvent("hero_cta_click", { cta: "apply" })}
               className="w-full rounded-full bg-accent px-8 py-4 text-center text-base font-bold text-ink shadow-lift transition-transform hover:scale-[1.03] sm:w-auto"
             >
-              베타테스터 신청하기
+              사전예약하기
             </a>
             <a
               href="#features"

@@ -1,23 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, PartyPopper, AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2, PartyPopper } from "lucide-react";
 import {
-  SURVEY_OPTIONS,
   APPLICANT_TYPES,
-  USAGE_INTENTS,
   DRIVING_FREQUENCIES,
-  REGIONS,
+  USAGE_INTENTS,
 } from "@/lib/constants";
-import { trackEvent, readUtmParams } from "@/lib/analytics";
+import { readUtmParams, trackEvent } from "@/lib/analytics";
 
 type SubmitState = "idle" | "loading" | "success" | "mock-success" | "error";
 
 const IS_PROD_STORAGE = Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 
 export default function BetaSection() {
-  const [features, setFeatures] = useState<string[]>([]);
-  const [contactType, setContactType] = useState<"email" | "phone">("email");
   const [state, setState] = useState<SubmitState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const openTracked = useRef(false);
@@ -30,7 +26,7 @@ export default function BetaSection() {
       (entries) => {
         if (entries[0]?.isIntersecting && !openTracked.current) {
           openTracked.current = true;
-          trackEvent("beta_form_open");
+          trackEvent("reservation_form_open");
           observer.disconnect();
         }
       },
@@ -39,18 +35,6 @@ export default function BetaSection() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  const toggleFeature = (feature: string) => {
-    setFeatures((prev) => {
-      const next = prev.includes(feature)
-        ? prev.filter((f) => f !== feature)
-        : [...prev, feature];
-      if (!prev.includes(feature)) {
-        trackEvent("feature_selected", { feature });
-      }
-      return next;
-    });
-  };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,24 +45,21 @@ export default function BetaSection() {
 
     if (data.get("privacyConsent") !== "on") {
       setState("error");
-      setErrorMessage("개인정보 수집·이용에 동의해주셔야 신청할 수 있어요.");
+      setErrorMessage("개인정보 수집·이용에 동의해주셔야 사전예약할 수 있어요.");
       return;
     }
 
     setState("loading");
     setErrorMessage("");
-    trackEvent("beta_form_submit");
+    trackEvent("reservation_form_submit");
 
     const payload = {
       applicantType: String(data.get("applicantType") ?? ""),
-      region: String(data.get("region") ?? ""),
       usageIntent: String(data.get("usageIntent") ?? ""),
-      contactType,
-      contact: String(data.get("contact") ?? "").trim(),
+      email: String(data.get("email") ?? "").trim(),
       privacyConsent: true,
       pregnancyWeek: String(data.get("pregnancyWeek") ?? ""),
       drivingFrequency: String(data.get("drivingFrequency") ?? ""),
-      desiredFeatures: features,
       discomfortExperience: String(data.get("discomfortExperience") ?? ""),
       comment: String(data.get("comment") ?? ""),
       ...readUtmParams(),
@@ -99,15 +80,14 @@ export default function BetaSection() {
         throw new Error(json.error ?? "잠시 후 다시 시도해주세요.");
       }
       setState(json.mock ? "mock-success" : "success");
-      trackEvent("beta_form_success", { mock: Boolean(json.mock) });
+      trackEvent("reservation_form_success", { mock: Boolean(json.mock) });
       form.reset();
-      setFeatures([]);
     } catch (error) {
       setState("error");
       setErrorMessage(
         error instanceof Error ? error.message : "잠시 후 다시 시도해주세요.",
       );
-      trackEvent("beta_form_error");
+      trackEvent("reservation_form_error");
     }
   };
 
@@ -115,55 +95,23 @@ export default function BetaSection() {
 
   return (
     <section
-      id="beta"
+      id="reservation"
       ref={sectionRef}
       className="scroll-mt-20 bg-brand-blush/60 py-16 lg:py-24"
     >
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <h2 className="reveal text-center text-2xl font-extrabold sm:text-3xl">
-          어떤 기능이 가장 필요하신가요?
+          돌봄 내비게이션을 가장 먼저 만나보세요
         </h2>
-        <p className="reveal mt-3 text-center text-ink/70">
-          필요한 기능을 모두 골라주세요. 신청과 함께 전달되어 서비스 우선순위에
-          반영됩니다.
+        <p className="reveal mx-auto mt-3 max-w-xl text-center leading-relaxed text-ink/70">
+          이메일로 사전예약하시면 서비스 출시 소식과 이용 방법을 가장 먼저
+          안내해드립니다.
         </p>
 
-        <fieldset className="reveal mt-8">
-          <legend className="sr-only">필요한 기능 선택 (복수 선택 가능)</legend>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {SURVEY_OPTIONS.map((option) => {
-              const active = features.includes(option);
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleFeature(option)}
-                  className={`flex min-h-[3.25rem] items-center justify-between rounded-2xl border-2 px-4 py-3 text-left text-sm font-medium transition-colors ${
-                    active
-                      ? "border-brand bg-white text-brand-deep shadow-card"
-                      : "border-transparent bg-white/70 text-ink/70 hover:bg-white"
-                  }`}
-                >
-                  {option}
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                      active ? "bg-brand text-white" : "bg-brand-blush"
-                    }`}
-                    aria-hidden="true"
-                  >
-                    {active && <Check className="h-4 w-4" />}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-
         <div className="reveal mt-10 rounded-card bg-white p-6 shadow-lift sm:p-9">
-          <h3 className="text-xl font-extrabold">베타테스터 신청</h3>
+          <h3 className="text-xl font-extrabold">사전예약</h3>
           <p className="mt-2 text-sm leading-relaxed text-ink/60">
-            남겨주신 정보는 시장 검증과 베타테스트 연락 목적으로만 수집·이용하며,
+            남겨주신 정보는 사전예약과 서비스 출시 안내 목적으로만 수집·이용하며,
             그 외 용도로 사용하지 않습니다.
           </p>
 
@@ -177,10 +125,10 @@ export default function BetaSection() {
                 aria-hidden="true"
               />
               <p className="mt-3 text-lg font-bold text-brand-deep">
-                신청이 완료되었습니다.
+                사전예약이 완료되었습니다.
               </p>
               <p className="mt-1 text-brand-deep/80">
-                조금 더 편안한 이동을 함께 만들어주셔서 감사합니다.
+                출시 소식과 이용 방법을 이메일로 안내해드릴게요.
               </p>
               {state === "mock-success" && (
                 <p className="mt-4 rounded-xl bg-white px-4 py-3 text-xs text-ink/60">
@@ -215,97 +163,41 @@ export default function BetaSection() {
                 </div>
               </fieldset>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="region" className="text-sm font-semibold">
-                    거주 지역 <RequiredMark />
-                  </label>
-                  <select
-                    id="region"
-                    name="region"
-                    required
-                    defaultValue=""
-                    className="mt-2 w-full rounded-xl border-2 border-brand-blush bg-white px-3.5 py-3 text-sm focus:border-brand"
-                  >
-                    <option value="" disabled>
-                      지역을 선택해주세요
+              <div>
+                <label htmlFor="usageIntent" className="text-sm font-semibold">
+                  서비스 사용 의향 <RequiredMark />
+                </label>
+                <select
+                  id="usageIntent"
+                  name="usageIntent"
+                  required
+                  defaultValue=""
+                  className="mt-2 w-full rounded-xl border-2 border-brand-blush bg-white px-3.5 py-3 text-sm focus:border-brand"
+                >
+                  <option value="" disabled>
+                    의향을 선택해주세요
+                  </option>
+                  {USAGE_INTENTS.map((intent) => (
+                    <option key={intent} value={intent}>
+                      {intent}
                     </option>
-                    {REGIONS.map((region) => (
-                      <option key={region} value={region}>
-                        {region}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="usageIntent" className="text-sm font-semibold">
-                    서비스 사용 의향 <RequiredMark />
-                  </label>
-                  <select
-                    id="usageIntent"
-                    name="usageIntent"
-                    required
-                    defaultValue=""
-                    className="mt-2 w-full rounded-xl border-2 border-brand-blush bg-white px-3.5 py-3 text-sm focus:border-brand"
-                  >
-                    <option value="" disabled>
-                      의향을 선택해주세요
-                    </option>
-                    {USAGE_INTENTS.map((intent) => (
-                      <option key={intent} value={intent}>
-                        {intent}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <span className="text-sm font-semibold" id="contact-label">
-                  연락처 (이메일 또는 휴대전화) <RequiredMark />
-                </span>
-                <div
-                  className="mt-2.5 grid grid-cols-2 gap-2"
-                  role="radiogroup"
-                  aria-labelledby="contact-label"
-                >
-                  {(
-                    [
-                      ["email", "이메일"],
-                      ["phone", "휴대전화"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={contactType === value}
-                      onClick={() => setContactType(value)}
-                      className={`min-h-[2.75rem] rounded-xl text-sm font-medium transition-colors ${
-                        contactType === value
-                          ? "bg-brand text-white"
-                          : "bg-brand-blush text-brand-deep"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <label htmlFor="contact" className="sr-only">
-                  {contactType === "email" ? "이메일 주소" : "휴대전화 번호"}
+                <label htmlFor="email" className="text-sm font-semibold">
+                  이메일 <RequiredMark />
                 </label>
                 <input
-                  id="contact"
-                  name="contact"
-                  type={contactType === "email" ? "email" : "tel"}
-                  inputMode={contactType === "email" ? "email" : "tel"}
+                  id="email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   required
-                  placeholder={
-                    contactType === "email"
-                      ? "hello@example.com"
-                      : "010-1234-5678"
-                  }
-                  className="mt-2.5 w-full rounded-xl border-2 border-brand-blush px-3.5 py-3 text-sm focus:border-brand"
+                  placeholder="hello@example.com"
+                  className="mt-2 w-full rounded-xl border-2 border-brand-blush px-3.5 py-3 text-sm focus:border-brand"
                 />
               </div>
 
@@ -345,9 +237,9 @@ export default function BetaSection() {
                         className="mt-2 w-full rounded-xl border-2 border-brand-blush bg-white px-3.5 py-3 text-sm focus:border-brand"
                       >
                         <option value="">선택 안 함</option>
-                        {DRIVING_FREQUENCIES.map((freq) => (
-                          <option key={freq} value={freq}>
-                            {freq}
+                        {DRIVING_FREQUENCIES.map((frequency) => (
+                          <option key={frequency} value={frequency}>
+                            {frequency}
                           </option>
                         ))}
                       </select>
@@ -392,7 +284,7 @@ export default function BetaSection() {
                 />
                 <span>
                   (필수) 개인정보 수집·이용에 동의합니다. 수집 항목은 위 입력
-                  정보이며, 시장 검증과 베타테스트 연락 목적으로만 사용됩니다.
+                  정보이며, 사전예약과 서비스 출시 안내 목적으로만 사용됩니다.
                 </span>
               </label>
 
@@ -401,7 +293,10 @@ export default function BetaSection() {
                   role="alert"
                   className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"
                 >
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <AlertCircle
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
                   {errorMessage}
                 </p>
               )}
@@ -414,10 +309,10 @@ export default function BetaSection() {
                 {state === "loading" ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-                    신청 접수 중…
+                    사전예약 접수 중…
                   </>
                 ) : (
-                  "베타테스터 신청하기"
+                  "사전예약하기"
                 )}
               </button>
 

@@ -11,10 +11,10 @@ export default function FinalCTA() {
           돌봄 내비게이션의 첫 번째 사용자가 되어주세요.
         </p>
         <a
-          href="#beta"
+          href="#reservation"
           className="reveal mt-8 inline-block rounded-full bg-accent px-10 py-4 text-base font-bold text-ink shadow-lift transition-transform hover:scale-[1.03]"
         >
-          베타테스터 신청하기
+          사전예약하기
         </a>
       </div>
     </section>

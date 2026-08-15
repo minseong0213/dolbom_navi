@@ -27,10 +27,10 @@ export default function Header() {
             </a>
           ))}
           <a
-            href="#beta"
+            href="#reservation"
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-deep"
           >
-            베타테스터 신청
+            사전예약
           </a>
         </nav>
 
@@ -66,11 +66,11 @@ export default function Header() {
             ))}
           </ul>
           <a
-            href="#beta"
+            href="#reservation"
             onClick={() => setOpen(false)}
             className="mt-3 block rounded-full bg-brand py-3.5 text-center text-base font-semibold text-white"
           >
-            베타테스터 신청하기
+            사전예약하기
           </a>
         </nav>
       )}
