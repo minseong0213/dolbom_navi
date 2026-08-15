@@ -25,7 +25,7 @@ export default function Footer() {
           </nav>
         </div>
         <p id="privacy-note" className="mt-8 border-t border-white/15 pt-6 text-xs leading-relaxed text-white/50">
-          신청 폼으로 수집한 개인정보는 시장 검증과 베타테스트 연락 목적으로만
+          사전예약 폼으로 수집한 개인정보는 사전예약과 서비스 출시 안내 목적으로만
           사용하며, 목적 달성 후 지체 없이 파기합니다. 정식 개인정보처리방침은
           서비스 출시 전 게시 예정입니다.
         </p>

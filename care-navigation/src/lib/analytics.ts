@@ -2,12 +2,11 @@
 
 export type AnalyticsEvent =
   | "hero_cta_click"
-  | "beta_form_open"
-  | "feature_selected"
+  | "reservation_form_open"
   | "route_demo_interaction"
-  | "beta_form_submit"
-  | "beta_form_success"
-  | "beta_form_error"
+  | "reservation_form_submit"
+  | "reservation_form_success"
+  | "reservation_form_error"
   | "faq_open"
   | "scroll_50"
   | "scroll_90";

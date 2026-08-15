@@ -2,14 +2,11 @@ import { NextResponse } from "next/server";
 
 interface InterestPayload {
   applicantType: string;
-  region: string;
   usageIntent: string;
-  contactType: "email" | "phone";
-  contact: string;
+  email: string;
   privacyConsent: boolean;
   pregnancyWeek?: string;
   drivingFrequency?: string;
-  desiredFeatures?: string[];
   discomfortExperience?: string;
   comment?: string;
   referrer?: string;
@@ -19,17 +16,12 @@ interface InterestPayload {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE = /^01[016789]-?\d{3,4}-?\d{4}$/;
 
 function validate(body: InterestPayload): string | null {
   if (!body.applicantType) return "신청자 유형을 선택해주세요.";
-  if (!body.region) return "거주 지역을 선택해주세요.";
   if (!body.usageIntent) return "서비스 사용 의향을 선택해주세요.";
-  if (!body.contact) return "이메일 또는 휴대전화 번호를 입력해주세요.";
-  if (body.contactType === "email" && !EMAIL_RE.test(body.contact))
-    return "이메일 형식을 확인해주세요.";
-  if (body.contactType === "phone" && !PHONE_RE.test(body.contact))
-    return "휴대전화 번호 형식을 확인해주세요.";
+  if (!body.email) return "이메일을 입력해주세요.";
+  if (!EMAIL_RE.test(body.email)) return "이메일 형식을 확인해주세요.";
   if (body.privacyConsent !== true)
     return "개인정보 수집·이용에 동의해주세요.";
   return null;
@@ -40,17 +32,10 @@ function toFirestoreFields(body: InterestPayload) {
   const s = (v: string | undefined) => ({ stringValue: v ?? "" });
   return {
     applicantType: s(body.applicantType),
-    region: s(body.region),
     pregnancyWeek: s(body.pregnancyWeek),
     drivingFrequency: s(body.drivingFrequency),
-    desiredFeatures: {
-      arrayValue: {
-        values: (body.desiredFeatures ?? []).map((f) => ({ stringValue: f })),
-      },
-    },
     usageIntent: s(body.usageIntent),
-    contactType: s(body.contactType),
-    contact: s(body.contact),
+    email: s(body.email),
     discomfortExperience: s(body.discomfortExperience),
     comment: s(body.comment),
     privacyConsent: { booleanValue: body.privacyConsent },
