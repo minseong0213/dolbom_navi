@@ -27,19 +27,24 @@ class RoutePenalty:
         return self.independent + self.dense
 
 
-def build_candidate_routes(
+@dataclass(frozen=True)
+class RouteEligibility:
+    routes: List[TmapRoute]
+    fastest_time_s: float
+    shortest_distance_m: float
+
+
+def select_eligible_routes(
     routes: Sequence[TmapRoute],
-    matches_by_route_id: Dict[str, List[MatchedBump]],
-    alert_distances_m: List[int],
-    min_alert_impact_score: float,
+    *,
     max_time_over_fastest_ratio: float,
     max_distance_over_shortest_ratio: Optional[float],
-    uphill_bump_ids_by_route_id: Optional[Dict[str, Set[int]]] = None,
-) -> List[CandidateRoute]:
+) -> RouteEligibility:
     if not routes:
-        return []
+        return RouteEligibility([], 0.0, 0.0)
 
-    fastest_time = min(route.summary.total_time_s for route in routes)
+    fastest_route = min(routes, key=lambda route: route.summary.total_time_s)
+    fastest_time = fastest_route.summary.total_time_s
     shortest_distance = min(route.summary.total_distance_m for route in routes)
     max_time = fastest_time * (1 + max_time_over_fastest_ratio)
     max_distance = (
@@ -56,10 +61,48 @@ def build_candidate_routes(
             or route.summary.total_distance_m <= max_distance
         )
     ]
-    if not eligible_routes:
-        eligible_routes = [
-            min(routes, key=lambda route: route.summary.total_time_s)
-        ]
+    if fastest_route not in eligible_routes:
+        eligible_routes.append(fastest_route)
+
+    return RouteEligibility(
+        routes=eligible_routes,
+        fastest_time_s=fastest_time,
+        shortest_distance_m=shortest_distance,
+    )
+
+
+def build_candidate_routes(
+    routes: Sequence[TmapRoute],
+    matches_by_route_id: Dict[str, List[MatchedBump]],
+    alert_distances_m: List[int],
+    min_alert_impact_score: float,
+    max_time_over_fastest_ratio: float,
+    max_distance_over_shortest_ratio: Optional[float],
+    uphill_bump_ids_by_route_id: Optional[Dict[str, Set[int]]] = None,
+    routes_are_eligible: bool = False,
+    baseline_fastest_time_s: Optional[float] = None,
+    baseline_shortest_distance_m: Optional[float] = None,
+) -> List[CandidateRoute]:
+    if not routes:
+        return []
+
+    if routes_are_eligible:
+        eligible_routes = list(routes)
+        fastest_time = baseline_fastest_time_s or min(
+            route.summary.total_time_s for route in routes
+        )
+        shortest_distance = baseline_shortest_distance_m or min(
+            route.summary.total_distance_m for route in routes
+        )
+    else:
+        eligibility = select_eligible_routes(
+            routes,
+            max_time_over_fastest_ratio=max_time_over_fastest_ratio,
+            max_distance_over_shortest_ratio=max_distance_over_shortest_ratio,
+        )
+        eligible_routes = eligibility.routes
+        fastest_time = eligibility.fastest_time_s
+        shortest_distance = eligibility.shortest_distance_m
 
     candidates: List[CandidateRoute] = []
     uphill_bump_ids_by_route_id = uphill_bump_ids_by_route_id or {}
@@ -86,20 +129,42 @@ def build_candidate_routes(
         added_time_s = max(0.0, route.summary.total_time_s - fastest_time)
         added_distance_m = max(0.0, route.summary.total_distance_m - shortest_distance)
         comfort_score = max(0.0, 100.0 - impact_sum)
+        expressway_distance_m = min(
+            route.summary.total_distance_m,
+            route.expressway_distance_m,
+        )
+        scorable_distance_m = max(
+            0.0,
+            route.summary.total_distance_m - expressway_distance_m,
+        )
+        normalization_distance_km = max(1.0, scorable_distance_m / 1000.0)
+        impact_per_10km = impact_sum * 10.0 / normalization_distance_km
+        distance_normalized_score = max(0.0, 100.0 - impact_per_10km)
 
         candidates.append(
             CandidateRoute(
                 id=route.id,
                 search_option=route.search_option,
+                search_options=list(route.search_options),
                 search_option_label=route.label,
                 rank=0,
-                score=round(comfort_score, 3),
+                score=round(distance_normalized_score, 3),
+                raw_score=round(comfort_score, 3),
+                distance_normalized_score=round(distance_normalized_score, 3),
+                impact_per_10km=round(impact_per_10km, 3),
                 summary=route.summary,
                 added_time_s=round(added_time_s, 1),
                 added_distance_m=round(added_distance_m, 1),
                 bump_count=len(matches),
                 impact_sum=round(impact_sum, 3),
                 continuous_warning_count=continuous_warning_count,
+                is_expressway=expressway_distance_m > 0,
+                contains_expressway=expressway_distance_m > 0,
+                expressway_distance_m=round(expressway_distance_m, 1),
+                tunnel_distance_m=round(route.tunnel_distance_m, 1),
+                scorable_distance_m=round(scorable_distance_m, 1),
+                road_types=route.road_types,
+                facility_types=route.facility_types,
                 warnings=warnings,
                 matched_bumps=[to_bump_match(item) for item in matches],
                 polyline=[
@@ -109,7 +174,11 @@ def build_candidate_routes(
         )
 
     candidates.sort(
-        key=lambda candidate: (-candidate.score, candidate.summary.total_time_s)
+        key=lambda candidate: (
+            candidate.impact_sum,
+            candidate.bump_count,
+            candidate.summary.total_time_s,
+        )
     )
     for idx, candidate in enumerate(candidates, start=1):
         candidate.rank = idx
@@ -179,6 +248,8 @@ def to_bump_match(item: MatchedBump) -> BumpMatch:
         impact_score=round(bump.impact_score, 3),
         continuous_yn=bump.continuous_yn,
         density_count=bump.density_count,
+        meter_penalty=round(bump.meter_penalty, 5),
+        penalty_kind="dense" if bump.density_count > 1 else "independent",
         distance_from_route_m=round(item.distance_from_route_m, 2),
         distance_along_route_m=round(item.distance_along_route_m, 1),
     )

@@ -31,12 +31,15 @@ class Settings:
                 r"E:\전국방지턱\전국_방지턱_좌표검증완료_유형수정본.csv",
             )
         )
-        self.default_route_buffer_m = float(os.getenv("DEFAULT_ROUTE_BUFFER_M", "30"))
+        self.default_route_buffer_m = float(os.getenv("DEFAULT_ROUTE_BUFFER_M", "10"))
         self.default_min_alert_impact_score = float(
             os.getenv("DEFAULT_MIN_ALERT_IMPACT_SCORE", "0.75")
         )
         self.default_alert_distances_m = self._parse_int_list(
             os.getenv("DEFAULT_ALERT_DISTANCES_M", "300,100")
+        )
+        self.enable_api_docs = self._parse_bool(
+            os.getenv("ENABLE_API_DOCS", "true")
         )
 
     @staticmethod

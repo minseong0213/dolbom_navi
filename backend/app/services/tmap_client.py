@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 import hashlib
 from json import JSONDecodeError
@@ -23,6 +24,8 @@ SEARCH_OPTION_LABELS = {
 }
 
 AUTOMOBILE_ONLY_ROAD_TYPES = {0, 1}
+TUNNEL_NAME_KEYWORDS = ("터널", "지하차도", "지하도로")
+TRANSIENT_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,10 @@ class TmapRouteSegment:
     def excludes_speed_bumps(self) -> bool:
         return self.road_type in AUTOMOBILE_ONLY_ROAD_TYPES
 
+    @property
+    def is_tunnel(self) -> bool:
+        return any(keyword in self.name for keyword in TUNNEL_NAME_KEYWORDS)
+
 
 @dataclass(frozen=True)
 class TmapRoute:
@@ -46,13 +53,15 @@ class TmapRoute:
     polyline: List[LatLon]
     raw_feature_count: int
     segments: List[TmapRouteSegment] = field(default_factory=list)
+    source_search_options: Tuple[int, ...] = field(default_factory=tuple)
 
     @property
     def id(self) -> str:
         hasher = hashlib.sha1()
-        hasher.update(str(round(self.summary.total_distance_m)).encode("ascii"))
-        hasher.update(str(round(self.summary.total_time_s)).encode("ascii"))
-        for lat, lon in self.polyline[:: max(1, len(self.polyline) // 20)]:
+        for lat, lon in self.polyline[:: max(1, len(self.polyline) // 50)]:
+            hasher.update(f"{lat:.5f},{lon:.5f};".encode("ascii"))
+        if self.polyline:
+            lat, lon = self.polyline[-1]
             hasher.update(f"{lat:.5f},{lon:.5f};".encode("ascii"))
         return hasher.hexdigest()[:12]
 
@@ -68,6 +77,36 @@ class TmapRoute:
             if segment.excludes_speed_bumps
         ]
 
+    @property
+    def search_options(self) -> Tuple[int, ...]:
+        return self.source_search_options or (self.search_option,)
+
+    @property
+    def expressway_distance_m(self) -> float:
+        return sum(
+            segment.distance_m for segment in self.segments if segment.excludes_speed_bumps
+        )
+
+    @property
+    def tunnel_distance_m(self) -> float:
+        return sum(segment.distance_m for segment in self.segments if segment.is_tunnel)
+
+    @property
+    def road_types(self) -> List[int]:
+        return sorted(
+            {segment.road_type for segment in self.segments if segment.road_type is not None}
+        )
+
+    @property
+    def facility_types(self) -> List[int]:
+        return sorted(
+            {
+                segment.facility_type
+                for segment in self.segments
+                if segment.facility_type is not None
+            }
+        )
+
 
 class TmapClient:
     def __init__(self, app_key: str, route_api_url: str) -> None:
@@ -79,6 +118,7 @@ class TmapClient:
         origin: Coordinate,
         destination: Coordinate,
         search_option: int,
+        client: Optional[httpx.AsyncClient] = None,
     ) -> TmapRoute:
         if not self.app_key:
             raise RuntimeError("TMAP_APP_KEY is not configured.")
@@ -106,18 +146,51 @@ class TmapClient:
         }
         params = {"version": "1", "format": "json"}
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                self.route_api_url, params=params, data=payload, headers=headers
+        if client is not None:
+            return await self._request_car_route(
+                client, params, payload, headers, search_option
             )
 
-        if response.status_code >= 400:
-            safe_body = response.text[:500]
-            raise RuntimeError(
-                f"TMAP route request failed: {response.status_code} {safe_body}"
+        async with httpx.AsyncClient(timeout=15.0) as owned_client:
+            return await self._request_car_route(
+                owned_client, params, payload, headers, search_option
             )
 
-        return parse_tmap_route(response.json(), search_option)
+    async def _request_car_route(
+        self,
+        client: httpx.AsyncClient,
+        params: Dict[str, str],
+        payload: Dict[str, str],
+        headers: Dict[str, str],
+        search_option: int,
+    ) -> TmapRoute:
+        last_error: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                response = await client.post(
+                    self.route_api_url,
+                    params=params,
+                    data=payload,
+                    headers=headers,
+                )
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = exc
+                if attempt == 0:
+                    await asyncio.sleep(0.25)
+                    continue
+                raise RuntimeError(f"TMAP route request failed: {exc}") from exc
+
+            if response.status_code in TRANSIENT_HTTP_STATUSES and attempt == 0:
+                await asyncio.sleep(0.25)
+                continue
+            if response.status_code >= 400:
+                safe_body = response.text[:500]
+                raise RuntimeError(
+                    f"TMAP route request failed: {response.status_code} {safe_body}"
+                )
+            return parse_tmap_route(response.json(), search_option)
+
+        raise RuntimeError(f"TMAP route request failed: {last_error}")
 
     async def search_places(self, query: str, count: int = 10) -> List[PlaceSearchResult]:
         if not self.app_key:

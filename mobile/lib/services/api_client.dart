@@ -49,7 +49,7 @@ class ApiClient {
         'origin': origin.toJson(),
         'destination': destination.toJson(),
         'search_options': [0, 1, 2, 4, 10, 12],
-        'buffer_m': 30,
+        'buffer_m': 10,
       }),
     );
 
