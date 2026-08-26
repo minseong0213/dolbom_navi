@@ -15,6 +15,7 @@ from app.services.geo import (
 
 
 GridKey = Tuple[int, int]
+SegmentGridKey = Tuple[int, int]
 LatLon = Tuple[float, float]
 
 
@@ -153,6 +154,12 @@ class SpeedBumpRepository:
         origin = polyline[0]
         polyline_xy = project_points(polyline, origin)
         cumulative_m = cumulative_lengths(polyline_xy)
+        segment_cell_size_m = max(50.0, buffer_m * 2)
+        segment_grid = _build_segment_grid(
+            polyline_xy,
+            buffer_m=buffer_m,
+            cell_size_m=segment_cell_size_m,
+        )
         excluded_xy = []
         for excluded_polyline in excluded_polylines:
             if not excluded_polyline:
@@ -165,8 +172,18 @@ class SpeedBumpRepository:
             if exclude_virtual and bump.is_virtual:
                 continue
             bump_xy = project_points([(bump.lat, bump.lon)], origin)[0]
+            segment_indices = None
+            if len(polyline_xy) > 1:
+                segment_indices = segment_grid.get(
+                    _segment_grid_key(bump_xy, segment_cell_size_m)
+                )
+                if not segment_indices:
+                    continue
             distance_m, along_m = point_to_polyline_distance(
-                bump_xy, polyline_xy, cumulative_m
+                bump_xy,
+                polyline_xy,
+                cumulative_m,
+                segment_indices=segment_indices,
             )
             if distance_m <= buffer_m:
                 if _nearest_route_geometry_is_excluded(
@@ -197,6 +214,37 @@ class SpeedBumpRepository:
                     candidates.append(bump)
 
         return candidates
+
+
+def _segment_grid_key(point_xy: Tuple[float, float], cell_size_m: float) -> SegmentGridKey:
+    return (
+        math.floor(point_xy[0] / cell_size_m),
+        math.floor(point_xy[1] / cell_size_m),
+    )
+
+
+def _build_segment_grid(
+    polyline_xy: Sequence[Tuple[float, float]],
+    *,
+    buffer_m: float,
+    cell_size_m: float,
+) -> Dict[SegmentGridKey, List[int]]:
+    grid: Dict[SegmentGridKey, List[int]] = {}
+    for idx in range(1, len(polyline_xy)):
+        ax, ay = polyline_xy[idx - 1]
+        bx, by = polyline_xy[idx]
+        min_key = _segment_grid_key(
+            (min(ax, bx) - buffer_m, min(ay, by) - buffer_m),
+            cell_size_m,
+        )
+        max_key = _segment_grid_key(
+            (max(ax, bx) + buffer_m, max(ay, by) + buffer_m),
+            cell_size_m,
+        )
+        for x_key in range(min_key[0], max_key[0] + 1):
+            for y_key in range(min_key[1], max_key[1] + 1):
+                grid.setdefault((x_key, y_key), []).append(idx)
+    return grid
 
 
 def _nearest_route_geometry_is_excluded(

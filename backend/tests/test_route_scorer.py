@@ -87,8 +87,9 @@ class RouteScorerTest(unittest.TestCase):
         )
 
         self.assertEqual([candidate.id for candidate in candidates], [safe.id, rough.id])
-        self.assertEqual(candidates[0].score, 97.0)
-        self.assertEqual(candidates[1].score, 92.0)
+        self.assertEqual(candidates[0].raw_score, 97.0)
+        self.assertEqual(candidates[1].raw_score, 92.0)
+        self.assertGreater(candidates[0].score, candidates[1].score)
 
     def test_does_not_add_match_count_or_continuous_weight(self):
         route = _route(0, 600, 5000)
@@ -103,7 +104,7 @@ class RouteScorerTest(unittest.TestCase):
             },
         )[0]
 
-        self.assertEqual(candidate.score, 97.0)
+        self.assertEqual(candidate.raw_score, 97.0)
         self.assertEqual(candidate.continuous_warning_count, 1)
 
     def test_dense_segment_uses_distance_rate_and_maximum_cap(self):
@@ -132,7 +133,7 @@ class RouteScorerTest(unittest.TestCase):
         )[0]
 
         self.assertEqual(candidate.impact_sum, 2.0)
-        self.assertEqual(candidate.score, 98.0)
+        self.assertEqual(candidate.raw_score, 98.0)
         self.assertEqual(candidate.continuous_warning_count, 1)
         self.assertEqual(candidate.warnings[0].impact_sum, 2.0)
 
@@ -162,9 +163,23 @@ class RouteScorerTest(unittest.TestCase):
         candidates = _build([slower, fast], matches)
 
         self.assertEqual(len(candidates), 2)
-        self.assertEqual(candidates[0].score, 98.0)
-        self.assertEqual(candidates[1].score, 98.0)
+        self.assertEqual(candidates[0].raw_score, 98.0)
+        self.assertEqual(candidates[1].raw_score, 98.0)
         self.assertEqual(candidates[0].id, fast.id)
+
+    def test_equal_impact_prefers_fewer_bumps_before_travel_time(self):
+        fast = _route(0, 600, 5000)
+        fewer_bumps = _route(2, 606, 5100)
+        matches = {
+            fast.id: [_match(1, 1.0, 100), _match(2, 1.0, 200)],
+            fewer_bumps.id: [_match(3, 2.0, 100)],
+        }
+
+        candidates = _build([fast, fewer_bumps], matches)
+
+        self.assertEqual(candidates[0].id, fewer_bumps.id)
+        self.assertEqual(candidates[0].bump_count, 1)
+        self.assertEqual(candidates[1].bump_count, 2)
 
     def test_excludes_routes_outside_time_allowance(self):
         fast = _route(0, 600, 5000)
@@ -200,7 +215,8 @@ class RouteScorerTest(unittest.TestCase):
             {route.id: [_match(1, 120.0, 100)]},
         )[0]
 
-        self.assertEqual(candidate.score, 0.0)
+        self.assertEqual(candidate.raw_score, 0.0)
+        self.assertEqual(candidate.distance_normalized_score, 0.0)
 
 
 if __name__ == "__main__":

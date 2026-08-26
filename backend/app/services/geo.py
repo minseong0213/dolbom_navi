@@ -1,5 +1,5 @@
 import math
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 
 EARTH_RADIUS_M = 6371008.8
@@ -48,7 +48,10 @@ def cumulative_lengths(points_xy: Sequence[XY]) -> List[float]:
 
 
 def point_to_polyline_distance(
-    point_xy: XY, polyline_xy: Sequence[XY], cumulative_m: Sequence[float]
+    point_xy: XY,
+    polyline_xy: Sequence[XY],
+    cumulative_m: Sequence[float],
+    segment_indices: Optional[Iterable[int]] = None,
 ) -> Tuple[float, float]:
     if len(polyline_xy) == 1:
         px, py = point_xy
@@ -59,7 +62,10 @@ def point_to_polyline_distance(
     best_distance = float("inf")
     best_along = 0.0
 
-    for idx in range(1, len(polyline_xy)):
+    indices = segment_indices if segment_indices is not None else range(1, len(polyline_xy))
+    for idx in indices:
+        if idx <= 0 or idx >= len(polyline_xy):
+            continue
         ax, ay = polyline_xy[idx - 1]
         bx, by = polyline_xy[idx]
         vx = bx - ax

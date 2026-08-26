@@ -13,7 +13,9 @@ class RouteRecommendRequest(BaseModel):
     origin: Coordinate
     destination: Coordinate
     search_options: List[int] = Field(
-        default_factory=lambda: [0, 1, 2, 4, 10, 12]
+        default_factory=lambda: [0, 1, 2, 4, 10, 12],
+        min_length=1,
+        max_length=8,
     )
     buffer_m: Optional[float] = Field(default=None, gt=0, le=100)
     alert_distances_m: Optional[List[int]] = None
@@ -37,6 +39,8 @@ class BumpMatch(BaseModel):
     impact_score: float
     continuous_yn: str
     density_count: int
+    meter_penalty: float = 0.0
+    penalty_kind: str = "independent"
     distance_from_route_m: float
     distance_along_route_m: float
 
@@ -63,25 +67,49 @@ class RouteSummary(BaseModel):
 class CandidateRoute(BaseModel):
     id: str
     search_option: int
+    search_options: List[int]
     search_option_label: str
     rank: int
     score: float
+    raw_score: float
+    distance_normalized_score: float
+    impact_per_10km: float
     summary: RouteSummary
     added_time_s: float
     added_distance_m: float
     bump_count: int
     impact_sum: float
     continuous_warning_count: int
+    is_expressway: bool
+    contains_expressway: bool
+    expressway_distance_m: float
+    tunnel_distance_m: float
+    scorable_distance_m: float
+    road_types: List[int]
+    facility_types: List[int]
     warnings: List[RouteWarning]
     matched_bumps: List[BumpMatch]
     polyline: List[Coordinate]
+
+
+class RouteOptionDiagnostic(BaseModel):
+    search_option: int
+    status: str
+    elapsed_ms: float
+    error: Optional[str] = None
 
 
 class RouteRecommendResponse(BaseModel):
     recommended_route_id: Optional[str]
     fastest_route_id: Optional[str]
     buffer_m: float
+    raw_candidate_count: int
+    deduplicated_candidate_count: int
+    eligible_candidate_count: int
     candidate_count: int
+    option_errors: List[str]
+    option_diagnostics: List[RouteOptionDiagnostic]
+    processing_time_ms: float
     candidates: List[CandidateRoute]
 
 

@@ -138,6 +138,9 @@ class CandidateRoute {
     required this.searchOptionLabel,
     required this.rank,
     required this.score,
+    required this.rawScore,
+    required this.distanceNormalizedScore,
+    required this.isExpressway,
     required this.summary,
     required this.addedTimeS,
     required this.bumpCount,
@@ -151,6 +154,9 @@ class CandidateRoute {
   final String searchOptionLabel;
   final int rank;
   final double score;
+  final double rawScore;
+  final double distanceNormalizedScore;
+  final bool isExpressway;
   final RouteSummary summary;
   final double addedTimeS;
   final int bumpCount;
@@ -165,6 +171,11 @@ class CandidateRoute {
       searchOptionLabel: json['search_option_label'] as String,
       rank: json['rank'] as int,
       score: (json['score'] as num).toDouble(),
+      rawScore: ((json['raw_score'] ?? json['score']) as num).toDouble(),
+      distanceNormalizedScore:
+          ((json['distance_normalized_score'] ?? json['score']) as num)
+              .toDouble(),
+      isExpressway: json['is_expressway'] as bool? ?? false,
       summary: RouteSummary.fromJson(json['summary'] as Map<String, dynamic>),
       addedTimeS: (json['added_time_s'] as num).toDouble(),
       bumpCount: json['bump_count'] as int,

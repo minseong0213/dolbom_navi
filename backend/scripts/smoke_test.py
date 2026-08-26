@@ -26,7 +26,7 @@ async def main() -> None:
     )
     matches = repository.match_route(
         route.polyline,
-        buffer_m=30,
+        buffer_m=10,
         exclude_virtual=True,
         excluded_polylines=route.speed_bump_excluded_polylines,
     )
