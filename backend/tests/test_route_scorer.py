@@ -152,7 +152,7 @@ class RouteScorerTest(unittest.TestCase):
         self.assertLess(uphill.impact_sum, downhill.impact_sum)
         self.assertGreater(uphill.score, downhill.score)
 
-    def test_time_and_distance_do_not_change_score(self):
+    def test_prefers_higher_score_within_time_allowance(self):
         fast = _route(0, 600, 5000)
         slower = _route(2, 660, 5900)
         matches = {
@@ -165,11 +165,42 @@ class RouteScorerTest(unittest.TestCase):
         self.assertEqual(len(candidates), 2)
         self.assertEqual(candidates[0].raw_score, 98.0)
         self.assertEqual(candidates[1].raw_score, 98.0)
-        self.assertEqual(candidates[0].id, fast.id)
+        self.assertGreater(candidates[0].score, candidates[1].score)
+        self.assertEqual(candidates[0].id, slower.id)
+
+    def test_score_wins_over_impact_bump_count_and_travel_time(self):
+        fast = _route(0, 600, 10000)
+        highest_score = _route(2, 660, 15000)
+        matches = {
+            fast.id: [
+                _match(1, 1.0, 100),
+                _match(2, 1.0, 200),
+                _match(3, 1.0, 300),
+                _match(4, 1.0, 400),
+            ],
+            highest_score.id: [
+                _match(5, 1.0, 100),
+                _match(6, 1.0, 200),
+                _match(7, 1.0, 300),
+                _match(8, 1.0, 400),
+                _match(9, 1.0, 500),
+            ],
+        }
+
+        candidates = _build([fast, highest_score], matches)
+
+        self.assertGreater(candidates[0].score, candidates[1].score)
+        self.assertGreater(candidates[0].impact_sum, candidates[1].impact_sum)
+        self.assertGreater(candidates[0].bump_count, candidates[1].bump_count)
+        self.assertGreater(
+            candidates[0].summary.total_time_s,
+            candidates[1].summary.total_time_s,
+        )
+        self.assertEqual(candidates[0].id, highest_score.id)
 
     def test_equal_impact_prefers_fewer_bumps_before_travel_time(self):
         fast = _route(0, 600, 5000)
-        fewer_bumps = _route(2, 606, 5100)
+        fewer_bumps = _route(2, 606, 5000)
         matches = {
             fast.id: [_match(1, 1.0, 100), _match(2, 1.0, 200)],
             fewer_bumps.id: [_match(3, 2.0, 100)],
