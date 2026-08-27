@@ -175,6 +175,7 @@ def build_candidate_routes(
 
     candidates.sort(
         key=lambda candidate: (
+            -candidate.score,
             candidate.impact_sum,
             candidate.bump_count,
             candidate.summary.total_time_s,
