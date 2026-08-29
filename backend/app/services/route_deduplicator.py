@@ -2,6 +2,7 @@ from dataclasses import dataclass, replace
 from typing import List, Sequence, Tuple
 
 from app.services.geo import cumulative_lengths, point_to_polyline_distance, project_points
+from app.services.speed_bump_repository import _build_segment_grid, _segment_grid_key
 from app.services.tmap_client import TmapRoute
 
 
@@ -99,11 +100,36 @@ def _directed_overlap(
     target_cumulative: Sequence[float],
 ) -> float:
     samples = _sample_polyline(source_xy, source_cumulative)
-    within_threshold = sum(
-        point_to_polyline_distance(sample, target_xy, target_cumulative)[0]
-        <= ROUTE_SIMILARITY_DISTANCE_M
-        for sample in samples
+    if not samples:
+        return 0.0
+
+    # 샘플마다 대상 폴리라인 전체를 훑으면 O(샘플수 x 점수)라 장거리에서 폭발한다.
+    # (서울-부산 기준 한 방향 26초) 방지턱 매칭과 동일한 세그먼트 격자를 써서
+    # 샘플 주변 세그먼트만 비교한다. 격자 반경이 임계값과 같으므로 판정 결과는 동일하다.
+    cell_size_m = max(50.0, ROUTE_SIMILARITY_DISTANCE_M * 2)
+    segment_grid = _build_segment_grid(
+        target_xy,
+        buffer_m=ROUTE_SIMILARITY_DISTANCE_M,
+        cell_size_m=cell_size_m,
     )
+
+    within_threshold = 0
+    for sample in samples:
+        segment_indices = None
+        if len(target_xy) > 1:
+            segment_indices = segment_grid.get(_segment_grid_key(sample, cell_size_m))
+            # 주변 셀에 세그먼트가 없으면 임계값 안에 들어올 수 없다.
+            if not segment_indices:
+                continue
+        distance, _ = point_to_polyline_distance(
+            sample,
+            target_xy,
+            target_cumulative,
+            segment_indices=segment_indices,
+        )
+        if distance <= ROUTE_SIMILARITY_DISTANCE_M:
+            within_threshold += 1
+
     return within_threshold / max(1, len(samples))
 
 
